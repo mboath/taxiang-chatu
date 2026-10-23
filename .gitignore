@@ -1,0 +1,9 @@
+# 构建产物 / 依赖
+hechatu-func.zip
+cloudbase/third_party/
+__pycache__/
+*.pyc
+
+# 系统/编辑器
+.DS_Store
+*.log

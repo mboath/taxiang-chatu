@@ -1,0 +1,2 @@
+# 他乡茶图后端仅用 Python 标准库（http.server/urllib/json/difflib/subprocess），无需第三方依赖。
+# 此文件用于让云平台（Render 等）识别为 Python 项目。

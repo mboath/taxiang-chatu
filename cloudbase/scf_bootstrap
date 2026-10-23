@@ -1,0 +1,4 @@
+#!/bin/bash
+# CloudBase Python HTTP 云函数启动脚本（无扩展名，需 chmod +x）
+export PYTHONPATH="./third_party:$PYTHONPATH"
+/var/lang/python310/bin/python3.10 app.py

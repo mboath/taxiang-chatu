@@ -1,0 +1,15 @@
+# Render Blueprint — 他乡茶图（单 Python 进程，提供 API + 静态前端）
+# 使用：把本目录推到 GitHub，在 Render 选 New → Blueprint → 连接该仓库，自动读取此文件。
+services:
+  - type: web
+    name: taxiang-chatu
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python3 scripts/api_proxy.py"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: TENCENT_MAP_KEY
+        # 在 Render 后台手动填入你的腾讯位置服务 WebService Key
+        sync: false

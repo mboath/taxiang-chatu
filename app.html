@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>他乡茶图 · 给茶饮爱好者的旅游奶茶雷达</title>
+    <script charset="utf-8"
+        src="https://map.qq.com/api/gljs?v=1.exp&key=OB4BZ-D4W3U-B7VVO-4PJWW-6TKDJ-WPB77&libraries=visualization,geometry,service"
+        onerror="handleCDNError()"></script>
+    <script>
+    function handleCDNError() { alert('地图加载失败，请检查网络'); }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html, body { height:100%; font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif; -webkit-font-smoothing:antialiased; font-weight:400; }
+        #app { display:flex; height:100%; }
+
+        /* === 左栏 === */
+        #left-panel { width:480px; background:#faf6f0; border-right:1px solid #ede0d0; overflow-y:auto; flex-shrink:0; }
+        .panel-section { padding:16px 20px; border-bottom:1px solid #ede0d0; }
+        .section-title { font-size:13px; font-weight:700; color:#8b5e3c; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+        .section-hint { font-size:11px; color:#b8a090; margin-bottom:8px; }
+
+        /* 城市输入 */
+        .city-input-row { display:flex; gap:8px; align-items:center; }
+        .city-input { flex:1; padding:8px 10px; border:2px solid #ede0d0; border-radius:8px; font-size:13px; font-family:inherit; outline:none; }
+
+        /* 城市标签 tag */
+        .city-chip { display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #d8c4ad; color:#6b4a2f; font-size:13px; padding:5px 10px; border-radius:16px; margin:0 6px 6px 0; box-shadow:0 1px 2px rgba(0,0,0,0.05); }
+        .city-chip .remove { cursor:pointer; opacity:0.55; font-size:14px; line-height:1; }
+        .city-chip .remove:hover { opacity:1; }
+        .city-input:focus { border-color:#8b5e3c; }
+        .btn { padding:8px 14px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
+        .btn-green { background:#8b5e3c; color:#fff; }
+        .btn-green:hover { background:#6b4423; }
+        .btn-light { background:#f0e6d6; color:#8b5e3c; }
+        .btn-light:hover { background:#e8d8c0; }
+        .btn:disabled { opacity:.5; cursor:wait; }
+
+        /* 搜索建议下拉 */
+        .search-suggest { position:relative; }
+        .suggestion-list { position:absolute; top:100%; left:0; right:0; background:#fff; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.12); max-height:240px; overflow-y:auto; z-index:200; display:none; }
+        .suggestion-item { padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid #f5f0ea; }
+        .suggestion-item:hover { background:#f5ede0; }
+        .suggestion-item:last-child { border-bottom:none; }
+
+        /* 偏好测试占位 */
+        .quiz-placeholder { padding:24px 16px; text-align:center; background:#f5ede0; border-radius:12px; border:2px dashed #d4c4a8; }
+        .quiz-placeholder .icon { font-size:36px; margin-bottom:8px; }
+        .quiz-placeholder .text { font-size:12px; color:#b8a090; }
+
+        /* 半径滑块 */
+        .radius-row { display:flex; align-items:center; gap:10px; }
+        .radius-slider { flex:1; -webkit-appearance:none; height:6px; border-radius:3px; background:#ede0d0; outline:none; }
+        .radius-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#8b5e3c; cursor:pointer; }
+        .radius-value { font-size:13px; color:#8b5e3c; font-weight:700; min-width:50px; text-align:right; }
+
+        /* === 右栏 === */
+        #right-panel { flex:1; position:relative; }
+        #map { width:100%; height:100%; }
+        /* 暖咖色底图滤镜：在 WebGL canvas 之上盖一层半透明暖色，不破坏渲染、不影响交互 */
+        #map-warmtint {
+            position:absolute; top:0; left:0; right:0; bottom:0;
+            background: rgba(180,140,100,0.10);
+            mix-blend-mode: multiply;
+            pointer-events:none; z-index:1;
+        }
+        /* 地图上方交互层（搜索框/信息窗/标记）需高于滤镜 */
+        .search-box, #recommend-panel, .loading-overlay { z-index:100; }
+
+        /* 搜索框 */
+        .search-box { position:absolute; top:16px; left:50%; transform:translateX(-50%); z-index:100; display:flex; gap:8px; background:rgba(255,250,245,0.95); border-radius:24px; padding:6px 6px 6px 16px; box-shadow:0 2px 12px rgba(0,0,0,0.1); }
+        .search-box input { border:none; outline:none; font-size:14px; width:240px; background:transparent; font-family:inherit; }
+        .search-box .btn-locate { width:36px; height:36px; border-radius:50%; border:none; background:#8b5e3c; color:#fff; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; }
+        .suggestion-list { position:absolute; top:50px; left:16px; right:16px; background:#fff; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.12); max-height:240px; overflow-y:auto; z-index:101; display:none; }
+        .suggestion-item { padding:8px 16px; cursor:pointer; font-size:13px; border-bottom:1px solid #f5f0ea; }
+        .suggestion-item:hover { background:#f5ede0; }
+        .suggestion-item:last-child { border-bottom:none; }
+
+        /* 推荐面板 */
+        #recommend-panel { position:fixed; bottom:0; left:480px; right:0; z-index:2000; background:#fff; border-radius:20px 20px 0 0; box-shadow:0 -4px 24px rgba(0,0,0,0.12); max-height:45vh; overflow-y:scroll; -webkit-overflow-scrolling:touch; touch-action:pan-y; display:none; }
+        .rec-header { padding:8px 20px; display:flex; justify-content:flex-end; align-items:center; position:sticky; top:0; background:#fff; border-radius:20px 20px 0 0; z-index:1; }
+        .rec-title { display:none; }
+        .rec-close { cursor:pointer; color:#ccc; font-size:20px; padding:0 4px; }
+        .tier-section { padding:0 20px 8px; }
+        .tier-header { font-size:13px; font-weight:700; margin:10px 0 6px; display:flex; align-items:center; gap:4px; }
+        .tier-header.must { color:#e63946; }
+        .tier-header.worth { color:#e8734a; }
+        .tier-header.familiar { color:#999; }
+        .rec-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; cursor:pointer; transition:background .15s; }
+        .rec-item:hover { background:#f5ede0; }
+        .rec-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .rec-name { flex:1; font-size:13px; color:#333; word-break:break-all; }
+        .rec-dist { font-size:11px; color:#999; white-space:nowrap; }
+        .rec-badge { font-size:10px; padding:2px 6px; border-radius:8px; white-space:nowrap; }
+        .badge-local { background:#ffe8e8; color:#e63946; }
+        .badge-new { background:#fff0e0; color:#e8734a; }
+
+        /* 品牌合并行 */
+        .brand-group { margin-bottom:4px; border-radius:8px; overflow:hidden; }
+        .brand-row { display:flex; align-items:center; gap:8px; padding:8px; cursor:pointer; border-radius:8px; transition:background .15s; }
+        .brand-row:hover { background:#f5ede0; }
+        .brand-toggle { width:18px; text-align:center; font-size:12px; color:#999; transition:transform .2s; flex-shrink:0; }
+        .brand-toggle.open { transform:rotate(90deg); }
+        .brand-name { flex:1; font-size:14px; font-weight:500; color:#333; word-break:break-all; }
+        .brand-count { font-size:11px; color:#999; background:#f5f5f5; padding:1px 6px; border-radius:8px; white-space:nowrap; }
+        .brand-dist { font-size:11px; color:#999; white-space:nowrap; }
+        .brand-shops { display:none; padding:0 8px 4px 26px; }
+        .brand-shops.open { display:block; }
+        .shop-sub-item { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; cursor:pointer; font-size:12px; color:#666; }
+        .shop-sub-item:hover { background:#f5ede0; }
+        .shop-sub-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .shop-sub-dist { color:#aaa; white-space:nowrap; }
+
+        /* 级别页签 */
+        .rec-tabs { display:flex; gap:6px; padding:4px 20px 8px; position:sticky; top:44px; background:#fff; z-index:2; border-bottom:1px solid #f0e8dc; }
+        .rec-tab { flex:1; height:40px; text-align:center; padding:4px; font-size:13px; font-weight:600; color:#999; cursor:pointer; border-radius:8px; transition:all .15s; border:1.5px solid transparent; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; box-sizing:border-box; overflow:hidden; }
+        .rec-tab:hover { background:#f5ede0; }
+        .rec-tab.active { background:#ede0d0; color:#8b5e3c; border-color:#b8a090; }
+        .rec-tab .tab-l1 { font-size:12.5px; font-weight:700; line-height:1.15; }
+        .rec-tab .tab-l2row { display:flex; align-items:center; justify-content:center; gap:4px; line-height:1.15; }
+        .rec-tab .tab-l2 { font-size:10px; font-weight:400; opacity:0.7; }
+        .rec-tab .tab-count { font-size:10px; color:#b8a090; font-weight:400; }
+        .rec-tab.active .tab-count { color:#8b5e3c; }
+
+        /* 品牌序号圆点 */
+        .brand-num { width:22px; height:22px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+
+        /* 加载 */
+        .loading-overlay { position:fixed; top:50%; left:calc(50% + 240px); transform:translate(-50%,-50%); z-index:9999; background:rgba(0,0,0,0.7); color:#fff; padding:14px 28px; border-radius:10px; font-size:14px; display:none; }
+        .spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin .6s linear infinite; margin-right:8px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!-- ===== 左栏 ===== -->
+    <div id="left-panel">
+        <!-- 我在 -->
+        <div class="panel-section">
+            <div class="section-title">📍 我在</div>
+            <div class="search-suggest">
+                <div class="city-input-row">
+                    <input class="city-input" id="current-city-input" placeholder="输入地点或景区..." autocomplete="off">
+                    <button class="btn btn-light" id="btn-search-location">搜索</button>
+                    <button class="btn btn-light" id="btn-locate" title="定位当前位置">📡</button>
+                </div>
+                <div class="suggestion-list" id="city-suggestions"></div>
+            </div>
+            <div id="current-location-display" style="margin-top:6px; font-size:12px; color:#b8a090;">📍 未定位（点击 📡 或搜索地点）</div>
+        </div>
+
+        <!-- 我的城市 -->
+        <div class="panel-section">
+            <div class="section-title">🏠 我的城市</div>
+            <div class="city-input-row" style="margin-bottom:8px;">
+                <input class="city-input" id="home-city-input" placeholder="输入城市名添加..." autocomplete="off">
+                <button class="btn btn-light" id="btn-add-home">+ 添加</button>
+            </div>
+            <div id="home-cities-list"></div>
+        </div>
+
+        <!-- 奶茶偏好 -->
+        <div class="panel-section">
+            <div class="section-title">🧋 奶茶偏好</div>
+            <div class="quiz-placeholder">
+                <div class="icon">🧋</div>
+                <div class="text">MilkTi 明信片测试<br>即将上线</div>
+            </div>
+        </div>
+
+        <!-- 搜索半径 -->
+        <div class="panel-section">
+            <div class="section-title">🔍 搜索半径</div>
+            <div class="radius-row">
+                <input type="range" class="radius-slider" id="radius-slider" min="500" max="5000" step="100" value="1000">
+                <span class="radius-value" id="radius-value">1000m</span>
+            </div>
+            <button class="btn btn-green" id="btn-search" style="width:100%; margin-top:10px;">🔍 搜索附近奶茶</button>
+        </div>
+
+        <!-- 调试日志 -->
+        <div class="panel-section">
+            <div class="section-title" style="color:#999; font-size:12px;">📋 调试日志</div>
+            <div id="debug-log" style="max-height:200px; overflow-y:auto; font-size:11px; color:#888; font-family:monospace; background:#f9f9f9; border-radius:8px; padding:8px;">
+                <div style="color:#aaa;">等待操作...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 右栏 ===== -->
+    <div id="right-panel">
+        <div id="map"></div>
+        <div id="map-warmtint"></div>
+        <div class="loading-overlay" id="loading"><span class="spinner"></span><span id="loading-text">搜索中...</span></div>
+        <div id="recommend-panel">
+            <div class="rec-header">
+                <span class="rec-title" id="rec-title">🧋 附近奶茶推荐</span>
+                <span class="rec-close" onclick="document.getElementById('recommend-panel').style.display='none'">✕</span>
+            </div>
+            <div id="rec-tabs" class="rec-tabs"></div>
+            <div id="rec-content"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============ 全局配置 ============
+var API_KEY = ''; // WebService Key 由后端代理注入，前端不持有（避免泄露）
+var PROXY = (location.port === '8766' || location.port === '') ? '' : 'http://localhost:8766'; // 同源部署走相对路径，本地开发回退 8766
+var BASE_SEARCH = PROXY + '/api/search';
+var BASE_SUGGEST = PROXY + '/api/suggestion';
+var BASE_WEATHER = PROXY + '/api/weather';
+var BASE_GEOCODER = PROXY + '/api/geocoder';
+var SEARCH_KEYWORDS = ['奶茶', '果茶', '柠檬茶', '茶饮', '冷饮', '烧仙草', '酸奶', '雪冰'];
+var NATIONAL_BRANDS = [];
+var BRAND_CACHE = {};
+
+// 产品/品类通用词（与代理端保持一致），用于 parseBrand 提取核心品牌名
+var PRODUCT_WORDS = ['酸奶紫米露','鲜奶茶','珍珠奶茶','柠檬茶','手工茶','手作茶','手工酸奶','手作酸奶',
+    '烧仙草','冰激凌','冰淇淋','茶饮店','饮品店',
+    '紫米露','果汁','冷饮','奶茶','果茶','茶饮','饮品','烤茶',
+    '茶肆','茶室','茶铺','茶馆','茶坊',
+    '酸奶','珍珠','门店','店铺','店'];
+
+function extractCore(name) {
+    var core = name;
+    var stripped = false;
+    for (var i = 0; i < PRODUCT_WORDS.length; i++) {
+        if (core.indexOf(PRODUCT_WORDS[i]) >= 0) {
+            core = core.split(PRODUCT_WORDS[i]).join('');
+            stripped = true;
+        }
+    }
+    return { core: core.trim(), stripped: stripped };
+}
+
+// ============ 可见调试日志 ============
+function dlog(msg) {
+    console.log(msg);
+    var el = document.getElementById('debug-log');
+    if (el) {
+        el.innerHTML = '<div style="margin:2px 0;">' + msg + '</div>' + el.innerHTML;
+        el.scrollTop = 0;
+    }
+}
+
+// ============ API 调用（通过代理，不用 JSONP）============
+function apiGet(url, callback) {
+    fetch(url)
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(data) { callback(data); })
+        .catch(function(e) {
+            dlog('❌ <span style="color:red">请求失败: ' + e.message + '</span>');
+            dlog('   URL: ' + url.substring(0, 80));
+            callback({status: -1, message: e.message});
+        });
+}
+
+// ============ 状态 ============
+var map = null;
+var markers = null;       // 搜索结果标记
+var connectionLines = null; // 当前位置到各店的连线
+var locationMarker = null; // 用户位置标记
+var radiusCircle = null;  // 搜索半径圆
+var currentLocation = null; // {lat, lng, city}
+var homeCities = []; // [{name, lat, lng}]
+// 分级页签相关
+var allShops = [];          // 全部已分类排序的店铺
+var brandNumberMap = {};    // brand -> 序号
+var activeTab = 'all';      // 当前页签：all/must/worth/familiar
+var searchRadius = 1000;
+
+// ============ 初始化 ============
+window.onload = function() {
+    console.log('🚀 window.onload 开始');
+    try {
+        loadBrands();
+        initMap();
+        // 页面加载后自动定位
+        setTimeout(function() { autoLocate(); }, 500);
+    } catch(e) {
+        console.error('❌ 初始化失败:', e.message);
+        alert('初始化失败: ' + e.message);
+    }
+    try { loadHomeCities(); } catch(e) { console.error('❌ loadHomeCities', e); }
+    try { bindEvents(); } catch(e) { console.error('❌ bindEvents', e); }
+};
+
+// ============ 自动定位 ============
+function autoLocate() {
+    if (!navigator.geolocation) {
+        dlog('⚠️ 浏览器不支持定位，请手动搜索地点');
+        return;
+    }
+    dlog('📡 正在定位...');
+    navigator.geolocation.getCurrentPosition(function(pos) {
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        apiGet(BASE_GEOCODER + '?location=' + lat + ',' + lng + '&key=' + API_KEY + '&get_poi=0', function(data) {
+            if (data.status === 0) {
+                var addr = data.result.address_component;
+                var name = addr.city || addr.district || '当前位置';
+                setLocation(lat, lng, name, addr.city);
+                document.getElementById('current-city-input').value = name;
+                dlog('✅ 已定位到: ' + name);
+            } else {
+                setLocation(lat, lng, lat.toFixed(4) + ',' + lng.toFixed(4), '');
+                dlog('✅ 已定位');
+            }
+        });
+    }, function(err) {
+        dlog('⚠️ 定位未授权，已默认显示武汉');
+        dlog('💡 获取你的位置：手动搜索地名，或用系统浏览器打开本页');
+        // 兜底：默认武汉中心
+        setLocation(30.592849, 114.305596, '武汉（默认）', '武汉');
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
+
+function initMap() {
+    map = new TMap.Map('map', {
+        zoom: 12,
+        center: new TMap.LatLng(30.592849, 114.305596),
+        // 底面+路网+区划名+POI（point 带 POI 图标与文字标签，此版本文字与图标绑定）
+        baseMap: { type: 'vector', features: ['base', 'road', 'districtlabel', 'point'] },
+    });
+}
+
+function loadBrands() {
+    fetch('data/national_brands.json')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            NATIONAL_BRANDS = data;
+            // 按名称长度降序，避免短名误匹配
+            NATIONAL_BRANDS.sort(function(a, b) { return b.name.length - a.name.length; });
+            console.log('✅ 加载', NATIONAL_BRANDS.length, '个全国品牌');
+        })
+        .catch(function(e) { console.warn('品牌数据加载失败', e); });
+}
+
+function loadHomeCities() {
+    try {
+        var saved = localStorage.getItem('milktea_home_cities');
+        if (saved) {
+            homeCities = JSON.parse(saved);
+        }
+    } catch(e) {}
+    // 如果没有添加过城市，留空，提示用户添加
+    if (homeCities.length === 0) {
+        console.log('💡 用户未添加"我的城市"，请在左栏添加');
+    }
+    renderHomeCities();
+}
+
+function saveHomeCities() {
+    localStorage.setItem('milktea_home_cities', JSON.stringify(homeCities));
+}
+
+function renderHomeCities() {
+    var html = '';
+    homeCities.forEach(function(c, i) {
+        html += '<span class="city-chip">' + c.name + '<span class="remove" onclick="removeHomeCity(' + i + ')"> ✕</span></span>';
+    });
+    document.getElementById('home-cities-list').innerHTML = html;
+}
+
+function removeHomeCity(i) {
+    homeCities.splice(i, 1);
+    saveHomeCities();
+    renderHomeCities();
+}
+
+// ============ 事件绑定 ============
+function bindEvents() {
+    console.log('🔗 开始绑定事件');
+
+    // 半径滑块
+    document.getElementById('radius-slider').oninput = function(e) {
+        searchRadius = parseInt(e.target.value);
+        document.getElementById('radius-value').textContent = searchRadius + 'm';
+        // 实时更新地图上的半径圆
+        if (currentLocation) {
+            updateRadiusCircle(currentLocation.lat, currentLocation.lng);
+        }
+    };
+
+    // 搜索按钮
+    document.getElementById('btn-search').onclick = function() {
+        console.log('👆 搜索按钮被点击');
+        searchNearby();
+    };
+
+    // 定位按钮
+    document.getElementById('btn-locate').onclick = function() {
+        console.log('👆 定位按钮被点击');
+        locateUser();
+    };
+
+    // 添加城市
+    document.getElementById('btn-add-home').onclick = function() {
+        console.log('👆 添加城市按钮被点击');
+        addHomeCity();
+    };
+    document.getElementById('home-city-input').onkeydown = function(e) {
+        if (e.key === 'Enter') addHomeCity();
+    };
+
+    // 当前城市搜索建议
+    document.getElementById('current-city-input').oninput = debounce(function(e) {
+        var val = e.target.value.trim();
+        if (val.length < 2) { hideSuggestions(); return; }
+        console.log('🔎 搜索建议:', val);
+        getSuggestions(val, function(results) {
+            console.log('  建议结果:', results.length, '条');
+            renderSuggestions(results, function(item) {
+                setLocation(item.lat, item.lng, item.title, item.city);
+                document.getElementById('current-city-input').value = item.title;
+                hideSuggestions();
+            });
+        });
+    }, 300);
+
+    // 搜索按钮：用 geocoder 搜索
+    document.getElementById('btn-search-location').onclick = function() {
+        var val = document.getElementById('current-city-input').value.trim();
+        if (!val) { alert('请输入地名'); return; }
+        dlog('🔍 搜索地点: ' + val);
+        showLoading('搜索地点...');
+        apiGet(BASE_GEOCODER + '?address=' + encodeURIComponent(val) + '&key=' + API_KEY, function(data) {
+            hideLoading();
+            if (data.status === 0 && data.result && data.result.location) {
+                var loc = data.result.location;
+                setLocation(loc.lat, loc.lng, val, data.result.address_components && data.result.address_components.city);
+                hideSuggestions();
+            } else {
+                dlog('❌ 未找到: ' + val);
+                alert('未找到"' + val + '"，试试更具体的名称');
+            }
+        });
+    };
+
+    // 输入框回车也触发搜索
+    document.getElementById('current-city-input').onkeydown = function(e) {
+        if (e.key === 'Enter') {
+            hideSuggestions();
+            document.getElementById('btn-search-location').click();
+        }
+    };
+
+    // 地图点击选点
+    if (map) {
+        map.on('click', function(evt) {
+            var lat = evt.latLng.getLat();
+            var lng = evt.latLng.getLng();
+            currentLocation = { lat: lat, lng: lng, city: '' };
+            updateLocationMarker(lat, lng);
+            apiGet(BASE_GEOCODER + '?location=' + lat + ',' + lng + '&key=' + API_KEY + '&get_poi=0', function(data) {
+                if (data.status === 0) {
+                    var addr = data.result.address_component;
+                    var name = addr.city || addr.district || (lat.toFixed(3) + ',' + lng.toFixed(3));
+                    setLocation(lat, lng, name, addr.city);
+                } else {
+                    setLocation(lat, lng, lat.toFixed(4) + ',' + lng.toFixed(4), '');
+                }
+            });
+        });
+        console.log('✅ 地图点击事件已绑定');
+    } else {
+        console.warn('⚠️ map 为 null，跳过地图事件绑定');
+    }
+
+    console.log('✅ 所有事件绑定完成');
+}
+
+// ============ JSONP ============
+var jsonpCounter = 0;
+function jsonp(url, callback) {
+    var cbName = 'jsonp_cb_' + (++jsonpCounter);
+    var timeoutId = null;
+    var done = false;
+    window[cbName] = function(data) {
+        if (done) return; done = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        callback(data);
+        delete window[cbName];
+        var s = document.getElementById(cbName);
+        if (s) s.parentNode.removeChild(s);
+    };
+    var sep = url.indexOf('?') >= 0 ? '&' : '?';
+    var s = document.createElement('script');
+    s.id = cbName;
+    s.src = url + sep + 'output=jsonp&callback=' + cbName;
+    s.onerror = function() {
+        if (done) return; done = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        console.error('❌ JSONP 请求失败:', url.substring(0, 80));
+        callback({status: -1, message: '网络请求失败，可能是API Key无权限或网络问题'});
+        delete window[cbName];
+        if (s.parentNode) s.parentNode.removeChild(s);
+    };
+    // 10秒超时
+    timeoutId = setTimeout(function() {
+        if (done) return; done = true;
+        console.warn('⏰ JSONP 超时:', url.substring(0, 80));
+        callback({status: -2, message: '请求超时'});
+        delete window[cbName];
+        if (s.parentNode) s.parentNode.removeChild(s);
+    }, 10000);
+    document.head.appendChild(s);
+}
+
+// ============ 搜索建议 ============
+function getSuggestions(keyword, callback) {
+    var region = encodeURIComponent('中国');
+    var url = BASE_SUGGEST + '?keyword=' + encodeURIComponent(keyword) + '&key=' + API_KEY + '&region=' + region + '&region_fix=0';
+    dlog('🔎 搜索建议: ' + keyword);
+    apiGet(url, function(data) {
+        dlog('   → status=' + data.status + ' count=' + (data.count || 0));
+        if (data.status === 0 && data.data) {
+            var results = data.data.slice(0, 8).map(function(d) {
+                return { title: d.title, lat: d.location.lat, lng: d.location.lng, city: d.city || d.ad_info && d.ad_info.city };
+            });
+            callback(results);
+        } else {
+            dlog('   ⚠️ ' + (data.message || '未知错误'));
+            callback([]);
+        }
+    });
+}
+
+function renderSuggestions(items, onClick) {
+    var list = document.getElementById('city-suggestions');
+    if (!items.length) { list.style.display = 'none'; return; }
+    list.innerHTML = items.map(function(item, i) {
+        return '<div class="suggestion-item" data-idx="' + i + '">' + item.title + '</div>';
+    }).join('');
+    list.style.display = 'block';
+    list.querySelectorAll('.suggestion-item').forEach(function(el) {
+        el.onclick = function() { onClick(items[parseInt(el.dataset.idx)]); list.style.display = 'none'; };
+    });
+}
+
+function hideSuggestions() { document.getElementById('city-suggestions').style.display = 'none'; }
+
+// ============ 定位 ============
+function setLocation(lat, lng, name, city) {
+    currentLocation = { lat: lat, lng: lng, city: city || name || '' };
+    map.setCenter(new TMap.LatLng(lat, lng));
+    map.setZoom(15);
+    updateLocationMarker(lat, lng);
+    updateRadiusCircle(lat, lng);
+    var display = document.getElementById('current-location-display');
+    if (display) display.textContent = '📍 ' + (name || city || lat.toFixed(4) + ',' + lng.toFixed(4));
+    console.log('✅ 位置已设置:', currentLocation);
+}
+
+// 位置标记（图钉，尖端落在定位点上）
+function updateLocationMarker(lat, lng) {
+    if (locationMarker) { locationMarker.setMap(null); }
+    var pin = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32">'
+        + '<path d="M12 0 C5.4 0 0 5.4 0 12 C0 19.5 12 32 12 32 C12 32 24 19.5 24 12 C24 5.4 18.6 0 12 0 Z" fill="#e63946" stroke="#fff" stroke-width="2.2"/>'
+        + '<circle cx="12" cy="11.5" r="4.2" fill="#fff"/>'
+        + '</svg>';
+    locationMarker = new TMap.MultiMarker({
+        map: map,
+        styles: {
+            loc: new TMap.MarkerStyle({
+                width: 24,
+                height: 32,
+                anchor: { x: 12, y: 32 },
+                src: 'data:image/svg+xml;utf8,' + encodeURIComponent(pin),
+            }),
+        },
+        geometries: [{
+            id: 'user_loc',
+            position: new TMap.LatLng(lat, lng),
+            styleId: 'loc',
+        }],
+    });
+}
+
+// 搜索半径圆
+function updateRadiusCircle(lat, lng) {
+    if (radiusCircle) { radiusCircle.setMap(null); }
+    // 用多边形画圆（64个点近似）
+    var points = [];
+    var r = searchRadius / 111000; // 度数近似
+    for (var i = 0; i < 64; i++) {
+        var angle = (i / 64) * 2 * Math.PI;
+        points.push(new TMap.LatLng(lat + r * Math.sin(angle), lng + r * Math.cos(angle) / Math.cos(lat * Math.PI / 180)));
+    }
+    radiusCircle = new TMap.MultiPolygon({
+        map: map,
+        styles: {
+            circle: new TMap.PolygonStyle({
+                color: 'rgba(82,52,28,0.12)',
+                showBorder: true,
+                borderColor: 'rgba(82,52,28,0.92)',
+                borderWidth: 3,
+            }),
+        },
+        geometries: [{
+            id: 'radius',
+            styleId: 'circle',
+            paths: points,
+        }],
+    });
+}
+
+function locateUser() {
+    if (!navigator.geolocation) { alert('浏览器不支持定位'); return; }
+    showLoading('定位中...');
+    navigator.geolocation.getCurrentPosition(function(pos) {
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        currentLocation = { lat: lat, lng: lng, city: '' };
+        map.setCenter(new TMap.LatLng(lat, lng));
+        map.setZoom(15);
+        updateLocationMarker(lat, lng);
+        // 逆地理
+        apiGet(BASE_GEOCODER + '?location=' + lat + ',' + lng + '&key=' + API_KEY + '&get_poi=0', function(data) {
+            if (data.status === 0) {
+                var addr = data.result.address_component;
+                setLocation(lat, lng, currentLocation.city || addr.city || '当前位置', addr.city);
+                document.getElementById('current-city-input').value = addr.city || '当前位置';
+            }
+            hideLoading();
+        });
+    }, function(err) {
+        hideLoading();
+        dlog('⚠️ 定位未授权，已默认显示武汉');
+        dlog('💡 获取你的位置：手动搜索地名，或用系统浏览器打开本页');
+        setLocation(30.592849, 114.305596, '武汉（默认）', '武汉');
+        map.setCenter(new TMap.LatLng(30.592849, 114.305596));
+        map.setZoom(12);
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
+
+// ============ 添加城市 ============
+function addHomeCity() {
+    var input = document.getElementById('home-city-input');
+    var name = input.value.trim();
+    if (!name) return;
+    // 检查是否已存在
+    if (homeCities.some(function(c) { return c.name === name; })) { alert('已添加过该城市'); return; }
+    // 通过 suggestion 获取坐标
+    getSuggestions(name, function(results) {
+        if (results.length) {
+            var r = results[0];
+            homeCities.push({ name: name, lat: r.lat, lng: r.lng });
+        } else {
+            homeCities.push({ name: name, lat: 0, lng: 0 });
+        }
+        saveHomeCities();
+        renderHomeCities();
+        input.value = '';
+    });
+}
+
+// ============ 周边搜索 ============
+function searchNearby() {
+    console.log('🔍 searchNearby 被调用');
+    var btn = document.getElementById('btn-search');
+    btn.disabled = true;
+    btn.textContent = '搜索中...';
+
+    if (!currentLocation) {
+        var c = map.getCenter();
+        currentLocation = { lat: c.getLat(), lng: c.getLng(), city: '' };
+    }
+    console.log('📍 当前位置:', currentLocation);
+
+    showLoading('搜索附近奶茶店...');
+    clearMarkers();
+    updateLocationMarker(currentLocation.lat, currentLocation.lng);
+    updateRadiusCircle(currentLocation.lat, currentLocation.lng);
+
+    var lat = currentLocation.lat;
+    var lng = currentLocation.lng;
+    var boundary = 'nearby(' + lat + ',' + lng + ',' + searchRadius + ',0)'; // 最后0=不自动扩大范围
+
+    var allShops = [];
+    var keywordIdx = 0;
+
+    function searchKeyword(keyword) {
+        var url = BASE_SEARCH + '?key=' + API_KEY + '&keyword=' + encodeURIComponent(keyword) + '&boundary=' + encodeURIComponent(boundary) + '&page_size=20&page_index=1';
+        apiGet(url, function(data) {
+            var count = (data.status === 0 && data.data) ? data.data.length : 0;
+            // 客户端再次过滤距离（API 有时会返回超出半径的结果）
+            var filtered = [];
+            if (data.status === 0 && data.data) {
+                data.data.forEach(function(s) {
+                    var d = s._distance || 0;
+                    if (d <= searchRadius) filtered.push(s);
+                });
+            }
+            dlog('🔍 ' + keyword + ' → ' + count + '条 → ' + filtered.length + '条在' + searchRadius + 'm内');
+            allShops = allShops.concat(filtered);
+            keywordIdx++;
+            if (keywordIdx < SEARCH_KEYWORDS.length) {
+                setTimeout(function() { searchKeyword(SEARCH_KEYWORDS[keywordIdx]); }, 250);
+            } else {
+                processResults(allShops);
+                btn.disabled = false;
+                btn.textContent = '🔍 搜索附近奶茶';
+            }
+        });
+    }
+
+    searchKeyword(SEARCH_KEYWORDS[0]);
+}
+
+// ============ 处理搜索结果 ============
+function processResults(shops) {
+    // 去重
+    var seen = {};
+    var unique = [];
+    shops.forEach(function(s) {
+        if (s.id && !seen[s.id]) { seen[s.id] = 1; unique.push(s); }
+    });
+
+    // 过滤非奶茶/果饮店
+    var EXCLUDE_KEYWORDS = ['便利店', '超市', '糕点', '面包', '烘焙', '蛋糕',
+                            '零食', '水果店', '炒货', '卤味', '烧烤', '火锅', '快餐',
+                            '面馆', '米粉', '饺子', '包子', '汉堡', '炸鸡', '披萨',
+                            '酒吧', '茶馆(棋牌)', '棋牌', '批发', '雪糕', '冰棒',
+                            '冷饮批发', '烟酒', '百货', '杂货', '药店', '书店'];
+    var INCLUDE_KEYWORDS = ['奶茶', '果茶', '茶饮', '冷饮', '烧仙草', '柠檬茶',
+                            '茶铺', '茶室', '茶', '饮品', '果饮', '鲜果',
+                            '奶盖', '波霸', '手作茶', '咖啡', '果汁', '冰沙', '冰激凌',
+                            '酸奶', '雪冰'];
+
+    var filtered = unique.filter(function(s) {
+        var title = s.title || '';
+        var category = s.category || '';
+        var text = title + ' ' + category;
+
+        // 排除关键词
+        for (var i = 0; i < EXCLUDE_KEYWORDS.length; i++) {
+            if (text.indexOf(EXCLUDE_KEYWORDS[i]) >= 0) return false;
+        }
+        // 包含关键词（至少匹配一个）
+        var matched = false;
+        for (var j = 0; j < INCLUDE_KEYWORDS.length; j++) {
+            if (text.indexOf(INCLUDE_KEYWORDS[j]) >= 0) { matched = true; break; }
+        }
+        // 如果没匹配到包含词，但 category 包含"饮"，也保留
+        if (!matched && category.indexOf('饮') >= 0) matched = true;
+        return matched;
+    });
+
+    console.log('🔍 搜索到', shops.length, '条，去重后', unique.length, '家，过滤后', filtered.length, '家');
+
+    // 解析品牌
+    var parsed = filtered.map(function(s) {
+        var brand = parseBrand(s.title);
+        var dist = s._distance || 0;
+        return {
+            id: s.id,
+            title: s.title,
+            brand: brand,
+            address: s.address,
+            lat: s.location.lat,
+            lng: s.location.lng,
+            distance: dist,
+            category: s.category || '',
+        };
+    });
+
+    // 合并品牌别名：短名是长名的子串 → 视为同品牌（如"欧可"与"欧可奶茶"）
+    var distinctBrands = [];
+    parsed.forEach(function(p) {
+        if (distinctBrands.indexOf(p.brand) < 0) distinctBrands.push(p.brand);
+    });
+    distinctBrands.sort(function(a, b) { return a.length - b.length; });
+    var brandAlias = {};
+    distinctBrands.forEach(function(b) { brandAlias[b] = b; });
+    for (var i = 0; i < distinctBrands.length; i++) {
+        for (var j = 0; j < distinctBrands.length; j++) {
+            if (i === j) continue;
+            var shortB = distinctBrands[i], longB = distinctBrands[j];
+            if (shortB.length >= 2 && longB.indexOf(shortB) >= 0) {
+                brandAlias[longB] = brandAlias[shortB];
+            }
+        }
+    }
+    parsed.forEach(function(p) {
+        var merged = brandAlias[p.brand];
+        if (merged && merged !== p.brand) {
+            dlog('🔗 品牌合并: ' + p.brand + ' → ' + merged);
+            p.brand = merged;
+        }
+    });
+
+    // 打印品牌解析结果 + 统计每个品牌的店铺数
+    var brandSet = {};
+    parsed.forEach(function(p) {
+        if (!brandSet[p.brand]) {
+            brandSet[p.brand] = 0;
+            var tag = isNationalBrand(p.brand) ? '连锁→查老家' : '本地→必尝';
+            dlog('🏷️ ' + p.brand + ' (' + tag + ')');
+        }
+        brandSet[p.brand]++;
+    });
+    var brandsToCheck = Object.keys(brandSet);
+
+    // 分类：先标记是否全国连锁
+    parsed.forEach(function(p) {
+        p.isNational = isNationalBrand(p.brand);
+    });
+
+    // 所有品牌都查，不在名单的用更严格置信度
+    var allBrands = brandsToCheck;
+
+    // 如果当前定位城市就在"我的城市"里 → 附近搜到的店必然在老家 → 全部直接归为熟悉
+    var currentCityInHome = currentLocation.city && homeCities.some(function(c) {
+        return currentLocation.city.indexOf(c.name) >= 0 || c.name.indexOf(currentLocation.city) >= 0;
+    });
+    if (currentCityInHome) {
+        dlog('📍 当前位置(' + currentLocation.city + ')在我的城市里 → 全部归为熟悉口味');
+        parsed.forEach(function(p) { p.tier = 'familiar'; });
+        applyShops(parsed);
+        hideLoading();
+        return;
+    }
+
+    // 把品牌店铺数 + 是否在连锁名单 传给验证函数
+    checkBrandsInHomeCities(allBrands, brandSet, function(brandCityMap) {
+        // 收集"必尝候选"品牌（非名单内 + 老家没有），再查省会
+        var mustCandidates = [];
+        parsed.forEach(function(p) {
+            var inHomeCities = brandCityMap[p.brand] || false;
+            if (!p.isNational && !inHomeCities && mustCandidates.indexOf(p.brand) < 0) {
+                mustCandidates.push(p.brand);
+            }
+        });
+
+        function assignTiers(capitalMap) {
+            // 三级分类
+            parsed.forEach(function(p) {
+                var inHomeCities = brandCityMap[p.brand] || false;
+                var inCapital = capitalMap[p.brand] || false;
+                if (!p.isNational && !inHomeCities) {
+                    p.tier = inCapital ? 'worth' : 'must';  // 省会有店 → 区域连锁 → 值得一试
+                } else if (p.isNational && !inHomeCities) {
+                    p.tier = 'worth';
+                } else {
+                    p.tier = 'familiar';
+                }
+            });
+
+            // 排序：必尝 > 值得一试 > 熟悉，同级别按距离
+            var tierOrder = { must: 0, worth: 1, familiar: 2 };
+            parsed.sort(function(a, b) {
+                if (tierOrder[a.tier] !== tierOrder[b.tier]) return tierOrder[a.tier] - tierOrder[b.tier];
+                return a.distance - b.distance;
+            });
+
+            applyShops(parsed);
+            hideLoading();
+        }
+
+        if (mustCandidates.length === 0 || !currentLocation.lat) {
+            assignTiers({});
+            return;
+        }
+
+        // 省会检查：本地小店可能在省会有分店（区域连锁）
+        var capitalMap = {};
+        var pendingCap = mustCandidates.length;
+        dlog('🏛️ 省会检查: ' + mustCandidates.length + '个候选品牌');
+        mustCandidates.forEach(function(brand) {
+            fetch(PROXY + '/api/capital_check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    brand: brand,
+                    lat: currentLocation.lat,
+                    lng: currentLocation.lng,
+                    store_count: brandSet[brand] || 1,
+                    in_known_list: false
+                })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                capitalMap[brand] = !!data.found;
+                dlog('🏛️ ' + brand + ' @省会' + (data.capital || '?') + ' → ' + (data.found ? '有店→值得一试' : '无店→必尝'));
+                pendingCap--;
+                if (pendingCap === 0) assignTiers(capitalMap);
+            })
+            .catch(function(e) {
+                dlog('❌ 省会检查失败: ' + brand + ': ' + e.message);
+                pendingCap--;
+                if (pendingCap === 0) assignTiers(capitalMap);
+            });
+        });
+    });
+}
+
+// ============ 品牌解析 ============
+function parseBrand(title) {
+    // 先匹配全国品牌（长名优先）
+    for (var i = 0; i < NATIONAL_BRANDS.length; i++) {
+        if (title.indexOf(NATIONAL_BRANDS[i].name) >= 0) return NATIONAL_BRANDS[i].name;
+    }
+    // 去掉括号及括号内内容: "象子茶铺茶(巍山古城店)" → "象子茶铺茶"
+    var brand = title.replace(/（.*$/, '').replace(/\(.*$/, '').trim();
+    // 不去掉英文，保留完整品牌名（含英文）用于匹配和显示
+    // 去掉常见后缀词: "XX加盟店" "XX旗舰店" 等
+    brand = brand.replace(/(加盟店|旗舰店|总店|直营店|分公司|分店)$/, '').trim();
+    // 去掉末尾品类后缀，但仅当剥除后品牌名仍有3字以上（避免"老兵茶室"→"老兵"过短导致误匹配）
+    var beforeStrip = brand;
+    brand = brand.replace(/(门店|店铺|茶铺|茶饮|饮品店|茶饮店|店)$/, '').trim();
+    if (brand.length < 2) brand = beforeStrip;  // 剥除后仅剩1字或为空才保留原名，2字保留
+    // 如果太长，截取前20个字（防止异常长名，正常品牌名不受影响）
+    if (brand.length > 20) brand = brand.substring(0, 20);
+    // 如果为空，回退
+    if (!brand) brand = title.replace(/[\(（].*$/, '').replace(/[A-Za-z\s]/g, '').substring(0, 6);
+    return brand;
+}
+
+function isNationalBrand(brand) {
+    return NATIONAL_BRANDS.some(function(b) { return b.name === brand; });
+}
+
+function getBrandColor(brand) {
+    for (var i = 0; i < NATIONAL_BRANDS.length; i++) {
+        if (NATIONAL_BRANDS[i].name === brand) return NATIONAL_BRANDS[i].color || '#8b5e3c';
+    }
+    return '#8b5e3c';
+}
+
+// ============ 检查品牌在"我的城市"是否存在 ============
+function checkBrandsInHomeCities(brands, brandStoreCount, callback) {
+    var result = {};
+    if (homeCities.length === 0) {
+        brands.forEach(function(b) { result[b] = false; });
+        callback(result);
+        return;
+    }
+    var pending = brands.length;
+    if (pending === 0) { callback(result); return; }
+
+    brands.forEach(function(brand) {
+        var cacheKey = brand + '_' + (homeCities.map(function(c) { return c.name; }).join(','));
+        if (BRAND_CACHE[cacheKey] !== undefined) {
+            result[brand] = BRAND_CACHE[cacheKey];
+            pending--;
+            if (pending === 0) callback(result);
+            return;
+        }
+
+        checkBrandInCities(brand, homeCities, brandStoreCount[brand] || 1, function(found) {
+            BRAND_CACHE[cacheKey] = found;
+            result[brand] = found;
+            pending--;
+            if (pending === 0) callback(result);
+        });
+    });
+}
+
+function checkBrandInCities(brand, cities, storeCount, callback, idx) {
+    idx = idx || 0;
+    if (idx >= cities.length) {
+        var conf = isNationalBrand(brand) ? '名单内' : (storeCount <= 1 ? '单店' : storeCount <= 4 ? '小连锁' : '大连锁');
+        dlog('🏷️ ' + brand + ' → 我的城市都没有 (' + conf + ') → ' + (isNationalBrand(brand) ? '值得一试' : '必尝'));
+        callback(false);
+        return;
+    }
+
+    var city = cities[idx];
+    var regionNames = [city.name];
+    if (city.name.indexOf('市') < 0) regionNames.push(city.name + '市');
+    if (city.name.indexOf('市') > 0) regionNames.push(city.name.replace('市', ''));
+
+    function tryCity(regionIdx) {
+        if (regionIdx >= regionNames.length) {
+            checkBrandInCities(brand, cities, storeCount, callback, idx + 1);
+            return;
+        }
+        var regionName = regionNames[regionIdx];
+        fetch(PROXY + '/api/verify_brand', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                brand: brand,
+                city: regionName,
+                store_count: storeCount,
+                in_known_list: isNationalBrand(brand)
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.found) {
+                dlog('🏷️ ' + brand + ' → ' + regionName + ':' + data.matched_count + '条 → 熟悉');
+                callback(true);
+            } else {
+                tryCity(regionIdx + 1);
+            }
+        })
+        .catch(function(e) {
+            dlog('❌ AI验证失败: ' + brand + ' @ ' + regionName + ': ' + e.message);
+            tryCity(regionIdx + 1);
+        });
+    }
+    tryCity(0);
+}
+
+// ============ 渲染推荐（按品牌合并）============
+// ============ 分级页签 ============
+function applyShops(shops) {
+    var tierOrder = { must: 0, worth: 1, familiar: 2 };
+    shops.sort(function(a, b) {
+        if (tierOrder[a.tier] !== tierOrder[b.tier]) return tierOrder[a.tier] - tierOrder[b.tier];
+        return a.distance - b.distance;
+    });
+    allShops = shops;
+    // 按出现顺序给品牌编号（同一品牌同一序号）
+    brandNumberMap = {};
+    var num = 0;
+    shops.forEach(function(s) {
+        if (!brandNumberMap[s.brand]) { num++; brandNumberMap[s.brand] = num; }
+    });
+    activeTab = 'all';
+    refreshView();
+}
+
+function switchTab(key) {
+    activeTab = key;
+    refreshView();
+}
+
+function refreshView() {
+    var shown = (activeTab === 'all')
+        ? allShops
+        : allShops.filter(function(s) { return s.tier === activeTab; });
+    renderRecommendations(shown);
+    renderMapMarkers(shown);
+    updateTabs();
+}
+
+function updateTabs() {
+    var shopCounts = { all: allShops.length, must: 0, worth: 0, familiar: 0 };
+    var brandSets = { all: {}, must: {}, worth: {}, familiar: {} };
+    allShops.forEach(function(s) {
+        if (shopCounts[s.tier] !== undefined) shopCounts[s.tier]++;
+        brandSets.all[s.brand] = true;
+        if (brandSets[s.tier]) brandSets[s.tier][s.brand] = true;
+    });
+    var brandCounts = {};
+    Object.keys(brandSets).forEach(function(k) { brandCounts[k] = Object.keys(brandSets[k]).length; });
+
+    var tabs = [
+        { key: 'all', label: '全部' },
+        { key: 'must', l1: '本土宝藏小众茶饮', l2: '不尝尝就走？' },
+        { key: 'worth', l1: '区域限定特色味道', l2: '路过别错过！' },
+        { key: 'familiar', l1: '家门口的品牌', l2: '熟悉不踩雷~' },
+    ];
+    var html = tabs.map(function(t) {
+        var sc = shopCounts[t.key] || 0;
+        var bc = brandCounts[t.key] || 0;
+        var cls = activeTab === t.key ? 'rec-tab active' : 'rec-tab';
+        var l1 = t.label || t.l1;
+        var l2row;
+        if (t.label) {
+            l2row = '<div class="tab-l2row"><span class="tab-count">' + bc + '品牌·' + sc + '家</span></div>';
+        } else {
+            l2row = '<div class="tab-l2row"><span class="tab-l2">' + t.l2 + '</span><span class="tab-count">' + bc + '品牌·' + sc + '家</span></div>';
+        }
+        return '<div class="' + cls + '" onclick="switchTab(\'' + t.key + '\')"><span class="tab-l1">' + l1 + '</span>' + l2row + '</div>';
+    }).join('');
+    document.getElementById('rec-tabs').innerHTML = html;
+}
+
+// 生成带序号的圆形 SVG 图标（data URI），按 tier 染色
+function makeBrandIcon(num, tier) {
+    var color = tierColorOf(tier);
+    var W = 34, H = 40;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">';
+    // 杯身（梯形上宽下窄）
+    svg += '<path d="M7 17 L23 17 L21 34 L9 34 Z" fill="' + color + '" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>';
+    if (tier === 'must') {
+        // 圆顶盖
+        svg += '<path d="M7 17 Q7 9 15 9 Q23 9 23 17 Z" fill="' + color + '" stroke="#fff" stroke-width="1.6"/>';
+        // 吸管（斜）
+        svg += '<rect x="15.5" y="2.5" width="2.6" height="10" rx="1" fill="#fff" transform="rotate(10 16.8 7.5)"/>';
+        // 珍珠
+        svg += '<circle cx="11.5" cy="29" r="1.6" fill="#3a2418"/><circle cx="15" cy="31" r="1.6" fill="#3a2418"/><circle cx="18.5" cy="28" r="1.4" fill="#3a2418"/>';
+    } else if (tier === 'worth') {
+        // 平盖
+        svg += '<rect x="7" y="12.5" width="16" height="4.5" rx="1.6" fill="' + color + '" stroke="#fff" stroke-width="1.6"/>';
+        // 吸管（直）
+        svg += '<rect x="16" y="3" width="2.6" height="11" rx="1" fill="#fff" transform="rotate(6 17.3 8.5)"/>';
+        // 珍珠
+        svg += '<circle cx="12" cy="28.5" r="1.6" fill="#3a2418"/><circle cx="15.5" cy="30.5" r="1.6" fill="#3a2418"/><circle cx="18.5" cy="28" r="1.4" fill="#3a2418"/>';
+    } else {
+        // 熟悉：无盖无吸管的矮杯，杯口描白线
+        svg += '<rect x="7" y="15.5" width="16" height="2" rx="0.5" fill="#fff"/>';
+        // 珍珠
+        svg += '<circle cx="12" cy="27" r="1.5" fill="#3a2418"/><circle cx="15.5" cy="29" r="1.5" fill="#3a2418"/>';
+    }
+    // 序号徽章：右上角白底圆 + 序号（右移并加宽画布避免被裁）
+    svg += '<circle cx="26" cy="9" r="7" fill="#fff" stroke="' + color + '" stroke-width="1.8"/>';
+    svg += '<text x="26" y="9.5" text-anchor="middle" dominant-baseline="central" font-size="9.5" font-weight="700" fill="' + color + '" font-family="sans-serif">' + num + '</text>';
+    svg += '</svg>';
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+function tierColorOf(tier) {
+    return tier === 'must' ? '#e63946' : tier === 'worth' ? '#e8734a' : '#b8a090';
+}
+
+function renderRecommendations(shops) {
+    var tiers = [
+        { key: 'must', label: '🥇 必尝！本土小众', cls: 'must', badge: '本土', badgeCls: 'badge-local' },
+        { key: 'worth', label: '🥈 值得一试', cls: 'worth', badge: '老家没有', badgeCls: 'badge-new' },
+        { key: 'familiar', label: '⚪ 熟悉口味', cls: 'familiar', badge: '', badgeCls: '' },
+    ];
+
+    var html = '';
+    var totalBrands = 0;
+
+    tiers.forEach(function(tier) {
+        var tierShops = shops.filter(function(s) { return s.tier === tier.key; });
+        if (!tierShops.length) return;
+
+        // 按品牌分组
+        var groups = {};
+        tierShops.forEach(function(s) {
+            if (!groups[s.brand]) groups[s.brand] = [];
+            groups[s.brand].push(s);
+        });
+
+        // 转为数组并按最近距离排序
+        var brandGroups = Object.keys(groups).map(function(brand) {
+            var items = groups[brand].sort(function(a, b) { return a.distance - b.distance; });
+            return { brand: brand, items: items, minDist: items[0].distance, maxDist: items[items.length-1].distance };
+        }).sort(function(a, b) { return a.minDist - b.minDist; });
+
+        totalBrands += brandGroups.length;
+
+        html += '<div class="tier-section"><div class="tier-header ' + tier.cls + '">' + tier.label + '</div>';
+        brandGroups.forEach(function(g) {
+            var numColor = tierColorOf(tier.key);
+            var brandNum = brandNumberMap[g.brand] || '';
+            var distText = g.items.length > 1
+                ? Math.round(g.minDist) + '~' + Math.round(g.maxDist) + 'm'
+                : Math.round(g.minDist) + 'm';
+            var badge = tier.badge ? '<span class="rec-badge ' + tier.badgeCls + '">' + tier.badge + '</span>' : '';
+
+            html += '<div class="brand-group">';
+            html += '<div class="brand-row" onclick="toggleBrand(this)">';
+            html += '<span class="brand-toggle">▶</span>';
+            html += '<span class="brand-num" style="background:' + numColor + '">' + brandNum + '</span>';
+            // 标题用完整店名（第一个店名去括号），不截断品类后缀
+            var displayName = g.items[0].title.replace(/（.*$/, '').replace(/\(.*$/, '').trim();
+            if (displayName.length > 20) displayName = displayName.substring(0, 20);
+            html += '<span class="brand-name">' + displayName + '</span>';
+            html += badge;
+            html += '<span class="brand-count">' + g.items.length + '家</span>';
+            html += '<span class="brand-dist">' + distText + '</span>';
+            html += '</div>';
+
+            // 分店列表（默认折叠）
+            html += '<div class="brand-shops">';
+            g.items.forEach(function(s) {
+                html += '<div class="shop-sub-item" data-lat="' + s.lat + '" data-lng="' + s.lng + '" onclick="focusShop(' + s.lat + ',' + s.lng + ')">';
+                html += '<span style="color:#ccc;">·</span>';
+                html += '<span class="shop-sub-name">' + s.title + '</span>';
+                html += '<span class="shop-sub-dist">' + Math.round(s.distance) + 'm</span>';
+                html += '</div>';
+            });
+            html += '</div></div>';
+        });
+        html += '</div>';
+    });
+
+    if (!shops.length) {
+        html = '<div style="padding:20px; text-align:center; color:#999;">附近没有找到奶茶店，试试调大搜索半径</div>';
+    }
+
+    document.getElementById('rec-content').innerHTML = html;
+    document.getElementById('recommend-panel').style.display = 'block';
+}
+
+function toggleBrand(el) {
+    var shops = el.nextElementSibling;
+    var toggle = el.querySelector('.brand-toggle');
+    if (shops.classList.contains('open')) {
+        shops.classList.remove('open');
+        toggle.classList.remove('open');
+    } else {
+        shops.classList.add('open');
+        toggle.classList.add('open');
+    }
+}
+
+function focusShop(lat, lng) {
+    map.setCenter(new TMap.LatLng(lat, lng));
+    map.setZoom(17);
+    event.stopPropagation();
+}
+
+// ============ 地图标记 ============
+function clearMarkers() {
+    if (markers) { markers.setMap(null); markers = null; }
+    if (connectionLines) { connectionLines.setMap(null); connectionLines = null; }
+}
+
+function renderMapMarkers(shops) {
+    clearMarkers();
+    if (!shops.length) return;
+
+    // 每个品牌一个 style（序号烤进 SVG，按 tier 染色），同品牌同序号
+    var styles = {};
+    shops.forEach(function(s) {
+        var sid = 'b' + brandNumberMap[s.brand];
+        if (styles[sid]) return;
+        styles[sid] = new TMap.MarkerStyle({
+            width: 34,
+            height: 40,
+            anchor: { x: 15, y: 20 },
+            src: makeBrandIcon(brandNumberMap[s.brand], s.tier),
+        });
+    });
+
+    // 绘制顺序：级别高(must)在级别低之上，同级序号越小越在上 → rank 越大越靠上
+    var tierBase = { must: 300000, worth: 200000, familiar: 100000 };
+    var geometries = shops.map(function(s) {
+        return {
+            id: s.id,
+            position: new TMap.LatLng(s.lat, s.lng),
+            styleId: 'b' + brandNumberMap[s.brand],
+            rank: (tierBase[s.tier] || 0) - (brandNumberMap[s.brand] || 0),
+            properties: { title: s.title, brand: s.brand, distance: s.distance, tier: s.tier, num: brandNumberMap[s.brand] }
+        };
+    });
+
+    // 当前位置 → 各店的连线（虚线、按级别染色，低透明度，雷达感）
+    if (currentLocation && currentLocation.lat) {
+        var lineGeoms = shops.map(function(s) {
+            return {
+                id: 'ln_' + s.id,
+                styleId: s.tier,
+                paths: [
+                    new TMap.LatLng(currentLocation.lat, currentLocation.lng),
+                    new TMap.LatLng(s.lat, s.lng)
+                ],
+            };
+        });
+        connectionLines = new TMap.MultiPolyline({
+            map: map,
+            styles: {
+                must: new TMap.PolylineStyle({ color: 'rgba(230,57,70,0.9)', width: 1 }),
+                worth: new TMap.PolylineStyle({ color: 'rgba(232,115,74,0.85)', width: 1 }),
+                familiar: new TMap.PolylineStyle({ color: 'rgba(110,90,75,0.8)', width: 1 }),
+            },
+            geometries: lineGeoms,
+        });
+    }
+
+    markers = new TMap.MultiMarker({
+        map: map,
+        styles: styles,
+        geometries: geometries,
+    });
+
+    // 点击标记弹信息
+    markers.on('click', function(evt) {
+        var props = evt.geometry.properties;
+        if (!props) return;
+        var tierText = props.tier === 'must' ? '🥇 必尝！' : props.tier === 'worth' ? '🥈 值得一试' : '⚪ 熟悉口味';
+        var info = new TMap.InfoWindow({
+            map: map,
+            position: evt.geometry.position,
+            offset: { x: 0, y: -22 },
+        }).open();
+        info.setContent('<div style="padding:8px 12px;font-size:13px;">#' + props.num + ' ' + tierText + '<br><b>' + props.title + '</b><br>' + Math.round(props.distance) + 'm</div>');
+        info.setPosition(evt.geometry.position);
+    });
+}
+
+// ============ 工具 ============
+function showLoading(text) { document.getElementById('loading-text').textContent = text || '加载中...'; document.getElementById('loading').style.display = 'block'; }
+function hideLoading() { document.getElementById('loading').style.display = 'none'; }
+function debounce(fn, wait) { var t; return function() { clearTimeout(t); var a = arguments; t = setTimeout(function() { fn.apply(null, a); }, wait); }; }
+</script>
+</body>
+</html>
